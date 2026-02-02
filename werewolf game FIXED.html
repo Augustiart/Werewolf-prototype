@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<title>Werewolf Card Game</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600&display=swap" rel="stylesheet">
+
+<style>
+
+*{box-sizing:border-box}
+body{
+  margin:0;
+  font-family:'Cinzel',serif;
+  background:radial-gradient(circle at top,#1a1a1a,#000);
+  color:#fff;
+  display:flex;
+  justify-content:center;
+  align-items:center;
+  min-height:100vh;
+}
+
+.screen{display:none;width:100%}
+.screen.active{display:flex;justify-content:center;align-items:center}
+
+h1,h2{text-align:center;margin:12px 0}
+
+.table{
+  background:#0f0f0f;
+  border:2px solid #2b2b2b;
+  border-radius:18px;
+  padding:18px;
+  box-shadow:0 0 40px rgba(0,0,0,.6);
+  max-width:420px;
+  width:100%;
+}
+
+.card{
+  background:#111;
+  border:2px solid #333;
+  border-radius:14px;
+  padding:14px;
+  margin:10px 0
+}
+
+input,button{
+  width:100%;
+  padding:12px;
+  border-radius:12px;
+  border:1px solid #444;
+  background:#181818;
+  color:#fff;
+  margin-top:8px;
+  font-family:'Cinzel',serif;
+}
+
+button:disabled{opacity:.3}
+
+.role-row{display:flex;align-items:center;gap:6px;margin:6px 0}
+.role-row span{flex:1}
+.role-row button{width:36px}
+
+.player-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.player-card{
+  background:#111;
+  border:2px solid #333;
+  border-radius:14px;
+  padding:12px;
+  text-align:center;
+  cursor:pointer
+}
+.player-card.selected{border-color:#c89b3c}
+.player-card.dead{opacity:.35}
+
+/* ===== FULL ART CARD ===== */
+.overlay{
+  position:fixed;
+  inset:0;
+  background:rgba(0,0,0,.95);
+  display:flex;
+  justify-content:center;
+  align-items:center;
+  z-index:99
+}
+.overlay.hidden{display:none}
+
+.art-card{
+  width:260px;
+  height:380px;
+  position:relative;
+  background-size:cover;
+  background-position:center;
+  border-radius:18px;
+  border:3px solid #c89b3c;
+  box-shadow:0 0 40px rgba(0,0,0,.9);
+  overflow:hidden;
+  animation:cardZoom .35s ease-out;
+}
+
+@keyframes cardZoom{
+  from{transform:scale(.85)}
+  to{transform:scale(1)}
+}
+
+.art-card::after{
+  content:"";
+  position:absolute;
+  inset:0;
+  background:linear-gradient(
+    to top,
+    rgba(0,0,0,.85),
+    rgba(0,0,0,.2),
+    rgba(0,0,0,.85)
+  );
+}
+
+.card-info{
+  position:absolute;
+  bottom:16px;
+  width:100%;
+  text-align:center;
+  z-index:2
+}
+.player-name{font-size:18px}
+.role-name{
+  font-size:14px;
+  letter-spacing:1px;
+  color:#c89b3c;
+  margin-top:4px;
+  text-transform:uppercase
+}
+
+/* ===== SLASH ===== */
+.slash{
+  position:absolute;
+  inset:-20%;
+  background:linear-gradient(
+    135deg,
+    transparent 45%,
+    rgba(255,0,0,.9) 50%,
+    transparent 55%
+  );
+  animation:slash .45s ease-out forwards;
+  z-index:3
+}
+
+@keyframes slash{
+  from{transform:translateX(-100%)}
+  to{transform:translateX(100%)}
+}
+
+/* ===== SCREEN SHAKE ===== */
+body.kill-shake{
+  animation:shake .25s ease-in-out;
+}
+@keyframes shake{
+  0%{transform:translate(0)}
+  25%{transform:translate(-4px,2px)}
+  50%{transform:translate(4px,-2px)}
+  75%{transform:translate(-3px,1px)}
+  100%{transform:translate(0)}
+}
+
+/* ===== END GAME ===== */
+#winnerText{
+  font-size:26px;
+  text-align:center;
+  color:#c89b3c
+}
+.end-box{
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  gap:16px;
+}
+#endGame button{
+  margin-top:16px;
+}
+
+</style>
+</head>
+<body>
+
+<!-- SETUP -->
+<div id="setup" class="screen active">
+  <div class="table">
+    <h1>Werewolf</h1>
+    <input id="playerCount" type="number" min="3" value="8">
+    <button onclick="goRoleSetup()">Start</button>
+  </div>
+</div>
+
+<!-- ROLE SETUP -->
+<div id="rolesetup" class="screen">
+  <div class="table">
+    <div class="card">
+      Player: <b id="pTotal"></b><br>
+      Role: <b id="used"></b><br>
+      Villager: <b id="villager"></b>
+    </div>
+    <div class="card" id="roleList"></div>
+    <input id="gmPin" maxlength="4" placeholder="GM PIN (4 digit)">
+    <button onclick="goNames()">Confirm</button>
+  </div>
+</div>
+
+<!-- NAMES -->
+<div id="names" class="screen">
+  <div class="table">
+    <div class="card" id="nameInputs"></div>
+    <button onclick="startGame()">Shuffle</button>
+  </div>
+</div>
+
+<!-- PASS -->
+<div id="pass" class="screen">
+  <div class="table">
+    <h2 id="passText"></h2>
+    <button onclick="revealCard()">Reveal</button>
+  </div>
+</div>
+
+<!-- GAME -->
+<div id="game" class="screen">
+  <div class="table">
+    <div class="player-grid" id="playerList"></div>
+    <button id="killBtn" onclick="killPlayer()" disabled>Kill</button>
+    <button onclick="openGM()">GM View</button>
+  </div>
+</div>
+
+<!-- PIN -->
+<div id="pin" class="screen">
+  <div class="table">
+    <h2>GM PIN</h2>
+    <input id="pinInput">
+    <button onclick="checkPin()">Enter</button>
+  </div>
+</div>
+
+<!-- GM VIEW -->
+<div id="gmview" class="screen">
+  <div class="table">
+    <h2>All Roles</h2>
+    <div class="card" id="gmList"></div>
+    <button onclick="show('game')">Back</button>
+  </div>
+</div>
+
+<!-- OVERLAY -->
+<div id="overlay" class="overlay hidden">
+  <div class="art-card" id="artCard">
+    <div class="card-info">
+      <div class="player-name" id="ovName"></div>
+      <div class="role-name" id="ovRole"></div>
+    </div>
+  </div>
+</div>
+
+<!-- END -->
+<div id="endGame" class="overlay hidden">
+  <div class="table">
+    <h1 id="winnerText"></h1>
+    <button onclick="restartGame()">Restart Game</button>
+  </div>
+</div>
+
+<script>
+const ROLES=["Werewolf","Lone Wolf","Seer","Doctor","Guardian","Hunter","Cupid","Witch"]
+const CARD_IMG={
+  Werewolf:"img/werewolf.jpg",
+  "Lone Wolf":"img/lonewolf.jpg",
+  Villager:"img/villager.jpg",
+  Guardian:"img/guardian.jpg",
+  Seer:"img/seer.jpg",
+  Doctor:"img/doctor.jpg",
+  Hunter:"img/hunter.jpg",
+  Cupid:"img/cupid.jpg",
+  Witch:"img/witch.jpg"
+}
+
+let roleCount={},players=[],roles=[]
+let index=0,selectedIndex=null,TOTAL=0,GM_PIN=""
+
+function show(id){
+  document.querySelectorAll(".screen").forEach(s=>s.classList.remove("active"))
+  document.getElementById(id).classList.add("active")
+}
+
+function goRoleSetup(){
+  TOTAL=+playerCount.value
+  roleCount={}
+  roleList.innerHTML=""
+  ROLES.forEach(r=>{
+    roleCount[r]=0
+    roleList.innerHTML+=`
+    <div class="role-row">
+      <span>${r}</span>
+      <button onclick="changeRole('${r}',-1)">-</button>
+      <b id="c_${r}">0</b>
+      <button onclick="changeRole('${r}',1)">+</button>
+    </div>`
+  })
+  updateInfo()
+  show("rolesetup")
+}
+
+function changeRole(r,d){
+  if(d>0 && getUsed()>=TOTAL)return
+  roleCount[r]=Math.max(0,roleCount[r]+d)
+  document.getElementById("c_"+r).textContent=roleCount[r]
+  updateInfo()
+}
+function getUsed(){return Object.values(roleCount).reduce((a,b)=>a+b,0)}
+function updateInfo(){
+  pTotal.textContent=TOTAL
+  used.textContent=getUsed()
+  villager.textContent=TOTAL-getUsed()
+}
+
+function goNames(){
+  GM_PIN=gmPin.value
+  nameInputs.innerHTML=""
+  for(let i=1;i<=TOTAL;i++)
+    nameInputs.innerHTML+=`<input placeholder="Player ${i}">`
+  show("names")
+}
+
+function startGame(){
+  roles=[]
+  Object.entries(roleCount).forEach(([r,c])=>{
+    for(let i=0;i<c;i++)roles.push(r)
+  })
+  while(roles.length<TOTAL)roles.push("Villager")
+  shuffle(roles)
+  players=[...nameInputs.querySelectorAll("input")].map((i,n)=>({
+    name:i.value||`Player ${n+1}`,
+    role:roles[n],
+    alive:true
+  }))
+  index=0
+  updatePass()
+  show("pass")
+}
+
+function updatePass(){
+  passText.textContent=`${players[index].name}, lihat kartu`
+}
+
+function revealCard(){
+  const p=players[index]
+  showOverlay(p)
+  setTimeout(()=>{
+    hideOverlay()
+    index++
+    index>=players.length?(renderPlayers(),show("game")):updatePass()
+  },2200)
+}
+
+function renderPlayers(){
+  selectedIndex=null
+  killBtn.disabled=true
+  playerList.innerHTML=""
+  players.forEach((p,i)=>{
+    const d=document.createElement("div")
+    d.className="player-card"+(p.alive?"":" dead")
+    d.textContent=p.name
+    d.onclick=()=>{
+      if(!p.alive)return
+      document.querySelectorAll(".player-card").forEach(x=>x.classList.remove("selected"))
+      d.classList.add("selected")
+      selectedIndex=i
+      killBtn.disabled=false
+    }
+    playerList.appendChild(d)
+  })
+}
+
+function killPlayer(){
+  if(selectedIndex===null)return
+  const p=players[selectedIndex]
+  p.alive=false
+  document.body.classList.add("kill-shake")
+  setTimeout(()=>document.body.classList.remove("kill-shake"),300)
+  showOverlay(p,true)
+  setTimeout(()=>{
+    hideOverlay()
+    renderPlayers()
+    checkWin()
+  },2400)
+}
+
+function showOverlay(p,slash=false){
+  ovName.textContent=p.name
+  ovRole.textContent=p.role
+  artCard.style.backgroundImage=`url(${CARD_IMG[p.role]||""})`
+  overlay.classList.remove("hidden")
+  if(slash){
+    const s=document.createElement("div")
+    s.className="slash"
+    artCard.appendChild(s)
+    setTimeout(()=>s.remove(),500)
+  }
+}
+function hideOverlay(){overlay.classList.add("hidden")}
+
+function checkWin(){
+  const alive=players.filter(p=>p.alive)
+  const wolves=alive.filter(p=>p.role==="Werewolf").length
+  const villagers=alive.length-wolves
+  if(wolves===0)showWin("VILLAGERS WIN 🧑‍🌾")
+  else if(wolves>=villagers)showWin("WEREWOLF WIN 🐺")
+}
+
+const endGameScreen=document.getElementById("endGame")
+function showWin(text){
+  winnerText.textContent=text
+  endGameScreen.classList.remove("hidden")
+}
+
+function restartGame(){
+  document.getElementById("endGame").classList.add("hidden")
+  show("setup")
+}
+
+function openGM(){show("pin")}
+function checkPin(){
+  if(pinInput.value===GM_PIN){
+    gmList.innerHTML=players.map(p=>`${p.name} — ${p.role}`).join("<br>")
+    show("gmview")
+  }else alert("PIN SALAH")
+}
+
+function shuffle(a){
+  for(let i=a.length-1;i>0;i--){
+    const j=Math.random()*(i+1)|0
+    ;[a[i],a[j]]=[a[j],a[i]]
+  }
+}
+</script>
+</body>
+</html>
